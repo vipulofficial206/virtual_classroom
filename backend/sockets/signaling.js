@@ -26,8 +26,14 @@ module.exports = function(io) {
          isTeacherOnline: !!rooms[roomId].teacherSocketId,
          sharingSocketId: rooms[roomId].sharingSocketId
       });
-      
-      socket.to(roomId).emit('user-joined', socket.id, userId, userName);
+    });
+
+    socket.on('ready-to-call', (payload) => {
+       const userState = socketToRoom[socket.id];
+       if (userState) {
+          socket.to(userState.roomId).emit('user-joined', socket.id, payload.userId, payload.userName);
+          console.log(`[SESSION] User ${payload.userName} is ready to call in ${userState.roomId}`);
+       }
     });
 
     socket.on('start-sharing', () => {

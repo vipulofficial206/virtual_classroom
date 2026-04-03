@@ -56,10 +56,15 @@ const LiveClass = () => {
     if (!activeClass) dispatch(fetchClassDetails(classId));
   }, [dispatch, classId, activeClass]);
 
+  const isJoinedRef = useRef(false);
+  useEffect(() => {
+    isJoinedRef.current = isJoined;
+  }, [isJoined]);
+
   // Unified Socket Signal Registry
   useEffect(() => {
     if (socket && classId && user) {
-       // 1. Immediately join room to listen for teacher presence
+       // 1. Join room once per session/classId change
        socket.emit('join-room', classId, user._id, user.name, user.role);
 
        // 2. Register global signal listeners
@@ -78,7 +83,7 @@ const LiveClass = () => {
 
        socket.on('user-joined', async (newSocketId, userId, userName) => {
           // Only initiate signaling if WE have already officially joined the call
-          if (isJoined) {
+          if (isJoinedRef.current) {
              const pc = createPeerConnection(newSocketId, userName);
              const offer = await pc.createOffer();
              await pc.setLocalDescription(offer);
@@ -93,7 +98,8 @@ const LiveClass = () => {
        });
 
        socket.on('offer', async (payload) => {
-          if (isJoined) {
+          // Handle incoming calls only if we are in the call
+          if (isJoinedRef.current) {
              const pc = createPeerConnection(payload.callerSocketId, payload.callerName);
              await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
              const answer = await pc.createAnswer();
@@ -175,7 +181,7 @@ const LiveClass = () => {
           socket.off('user-disconnected');
        };
     }
-  }, [socket, classId, user, isJoined, isTeacher, navigate]);
+  }, [socket, classId, user]);
 
   // Handle hardware termination separately
   useEffect(() => {
@@ -217,7 +223,7 @@ const LiveClass = () => {
     if (!localStream || !socket) return;
     setIsJoined(true);
     // Explicit signal that we are now officially part of the peer-to-peer session
-    socket.emit('user-joined', socket.id, user._id, user.name, user.role);
+    socket.emit('ready-to-call', { userId: user._id, userName: user.name });
   };
 
   const createPeerConnection = (targetSocketId, targetUserName) => {
@@ -258,29 +264,13 @@ const LiveClass = () => {
     }
   };
 
-  const toggleCam = async () => {
-    if (isCamOn && localStream) {
+  const toggleCam = () => {
+    if (localStream) {
        const videoTrack = localStream.getVideoTracks()[0];
        if (videoTrack) {
-          videoTrack.stop();
-          localStream.removeTrack(videoTrack);
-       }
-       setIsCamOn(false);
-    } else if (localStream) {
-       try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          const newTrack = stream.getVideoTracks()[0];
-          localStream.addTrack(newTrack);
-          setIsCamOn(true);
-          
-          if (isJoined) {
-             Object.values(peersRef.current).forEach(({ peerConnection }) => {
-                const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
-                if (sender) sender.replaceTrack(newTrack);
-             });
-          }
-       } catch (err) {
-          console.error("Failed to recover camera", err);
+          videoTrack.enabled = !isCamOn;
+          setIsCamOn(!isCamOn);
+          // Broadcast status if needed, but for P2P, enabling/disabling track just works
        }
     }
   };

@@ -612,10 +612,11 @@ const ClassDetails = () => {
                            <div className="p-8 bg-white rounded-[3rem] mb-10 shadow-3xl border-[8px] border-indigo-600/10 relative">
                               <QRCodeSVG value={`${window.location.origin}/class/${classId}/attendance/${qrToken}`} size={280} />
                            </div>
-                           <div className="text-center space-y-2 mb-8">
-                              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manual Entry String</p>
-                              <h3 className="text-4xl font-black text-white tracking-[0.2em]">{activeClass.code}</h3>
-                           </div>
+                            <div className="text-center space-y-2 mb-8">
+                               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manual Attendance Token</p>
+                               <h3 className="text-sm font-black text-white tracking-widest break-all px-8 py-2 bg-white/5 rounded-xl border border-white/5">{qrToken}</h3>
+                               <p className="text-[8px] text-slate-500 italic">Students can enter this token manually in their scanner terminal if optical link fails.</p>
+                            </div>
                            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
                               <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/join/${activeClass.code}`); alert("Link copied!"); }} className="flex-1 max-w-xs py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3">
                                  <Share2 className="w-4 h-4" /> Copy Join Link
@@ -682,6 +683,7 @@ const ClassDetails = () => {
             isOpen={isScannerOpen} 
             onClose={() => setIsScannerOpen(false)} 
             mode="attendance" 
+            classId={classId}
          />
 
          {/* Mobile Bottom Navigation */}

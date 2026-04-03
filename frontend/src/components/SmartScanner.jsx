@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, X, Loader2, Zap } from 'lucide-react';
 
-const SmartScanner = ({ isOpen, onClose, mode = 'attendance' }) => {
+const SmartScanner = ({ isOpen, onClose, mode = 'attendance', classId = null }) => {
+   const navigate = useNavigate();
    const scannerRef = useRef(null);
    const qrCodeId = "qr-reader";
    const html5QrCode = useRef(null);
@@ -64,17 +66,25 @@ const SmartScanner = ({ isOpen, onClose, mode = 'attendance' }) => {
 
    const handleDecoded = (text) => {
       // Find relative path for join or attendance
-      const joinMatch = text.match(/\/join\/[^\s/]+/);
-      const attendanceMatch = text.match(/\/class\/[^\s/]+\/attendance\/[^\s/]+/);
+      const joinMatch = text.match(/\/join\/([^\s/]+)/);
+      const attendanceMatch = text.match(/\/class\/([^\s/]+)\/attendance\/([^\s/]+)/);
 
       if (joinMatch) {
-         window.location.href = joinMatch[0];
+         navigate(`/join/${joinMatch[1]}`);
       } else if (attendanceMatch) {
-         window.location.href = attendanceMatch[0];
-      } else if (mode === 'join' && text.length >= 6 && text.length <= 10) {
-         window.location.href = `/join/${text}`;
+         navigate(`/class/${attendanceMatch[1]}/attendance/${attendanceMatch[2]}`);
+      } else if (mode === 'join' && text.length >= 6 && text.length <= 15) {
+         // Manual class code
+         navigate(`/join/${text}`);
+      } else if (mode === 'attendance' && text.length > 20) {
+         // Likely an attendance token, but we need classId
+         if (classId) {
+            navigate(`/class/${classId}/attendance/${text}`);
+         } else {
+            alert("To mark attendance manually, please enter the code from within the class portal.");
+         }
       } else {
-         alert("Unrecognized signature node.");
+         alert("Unrecognized signature node. Please ensure you are scanning a valid classroom QR.");
       }
       stopScanner();
       onClose();

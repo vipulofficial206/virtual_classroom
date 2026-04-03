@@ -103,8 +103,8 @@ const Dashboard = () => {
       if (!res.error) {
         setJoinModalOpen(false);
         setJoinCode('');
-        if (res.payload?.data?.class) {
-           navigate(`/class/${res.payload.data.class}`);
+        if (res.payload?._id) {
+           navigate(`/class/${res.payload._id}`);
         }
       }
     });
