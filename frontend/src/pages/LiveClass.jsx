@@ -12,7 +12,10 @@ import { QRCodeSVG } from 'qrcode.react';
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
   ]
 };
 
@@ -246,8 +249,17 @@ const LiveClass = () => {
 
      pc.ontrack = (event) => {
         setPeers(prev => {
-           if (prev.find(p => p.socketId === targetSocketId)) return prev;
-           return [...prev, { socketId: targetSocketId, stream: event.streams[0], userName: targetUserName }];
+           const existing = prev.find(p => p.socketId === targetSocketId);
+           if (existing) {
+              // If the existing peer record has a different stream object, update it
+              if (event.streams[0] && existing.stream !== event.streams[0]) {
+                 return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: event.streams[0] } : p);
+              }
+              return prev;
+           }
+           // Create a new stream from the track if no streams are provided in the event
+           const stream = event.streams[0] || new MediaStream([event.track]);
+           return [...prev, { socketId: targetSocketId, stream, userName: targetUserName }];
         });
      };
 
@@ -520,7 +532,15 @@ const ParticipantTile = ({ stream, name, isLocal, mirrored }) => (
 
 const VideoTile = ({ stream, className }) => {
    const ref = useRef();
-   useEffect(() => { if (ref.current && stream) ref.current.srcObject = stream; }, [stream]);
+   useEffect(() => { 
+      if (ref.current && stream) {
+         ref.current.srcObject = stream;
+         // Handle cases where tracks are added later (e.g. video after audio)
+         const onTrackAdded = () => { if (ref.current) ref.current.srcObject = stream; };
+         stream.addEventListener('addtrack', onTrackAdded);
+         return () => stream.removeEventListener('addtrack', onTrackAdded);
+      }
+   }, [stream]);
    return <video ref={ref} autoPlay playsInline className={`w-full h-full object-cover ${className}`} />;
 };
 

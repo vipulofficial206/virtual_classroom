@@ -44,6 +44,9 @@ const ClassDetails = () => {
    const [isTerminatingQr, setIsTerminatingQr] = useState(false);
    const [isExporting, setIsExporting] = useState(false);
    const [isScannerOpen, setIsScannerOpen] = useState(false);
+   
+   // Real-time synchronization
+   const [isTeacherOnline, setIsTeacherOnline] = useState(false);
 
    const socket = useSocket();
 
@@ -57,10 +60,22 @@ const ClassDetails = () => {
          socket.on('attendance-updated', () => {
             fetchClassStats();
          });
+         socket.on('room-status', ({ isTeacherOnline }) => {
+            setIsTeacherOnline(isTeacherOnline);
+         });
+         socket.on('teacher-status', ({ online }) => {
+            setIsTeacherOnline(online);
+         });
+         
+         // Fetch initial status
+         socket.emit('get-room-status', classId);
+
          return () => {
             socket.emit('leave-room', classId);
             socket.off('classwork-updated');
             socket.off('attendance-updated');
+            socket.off('room-status');
+            socket.off('teacher-status');
          };
       }
    }, [classId, user, dispatch, socket]);
@@ -227,7 +242,7 @@ const ClassDetails = () => {
       }
    };
 
-   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+   const isTeacher = user?.role?.toLowerCase() === 'teacher' || user?.role?.toLowerCase() === 'admin';
 
    if (isClassLoading) {
       return (
@@ -351,13 +366,33 @@ const ClassDetails = () => {
                      <h2 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tighter leading-tight">{activeClass.name}</h2>
                      <p className="text-indigo-100 font-medium text-sm md:text-lg opacity-80 line-clamp-2">{activeClass.description}</p>
                   </div>
-                  <button onClick={() => navigate(`/class/${classId}/live`)} className="w-full md:w-auto bg-rose-500 hover:bg-rose-600 text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl shadow-rose-500/30 transition transform hover:scale-105 active:scale-95 group">
-                     <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                     </span>
-                     Enter Live Room
-                  </button>
+                  
+                  {isTeacher ? (
+                    <button onClick={() => navigate(`/class/${classId}/live`)} className="w-full md:w-auto bg-rose-500 hover:bg-rose-600 text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl shadow-rose-500/30 transition transform hover:scale-105 active:scale-95 group">
+                       <Video className="w-5 h-5 shadow-inner" />
+                       Start Live Class
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => isTeacherOnline ? navigate(`/class/${classId}/live`) : alert("Instructor is currently offline. Sessions activate upon facilitator presence.")} 
+                      className={`w-full md:w-auto px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl transition transform group ${isTeacherOnline ? 'bg-emerald-500 hover:bg-emerald-600 text-white hover:scale-105 active:scale-95 shadow-emerald-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}
+                    >
+                       {isTeacherOnline ? (
+                          <>
+                            <span className="relative flex h-3 w-3">
+                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                               <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                            </span>
+                            Join Live Session
+                          </>
+                       ) : (
+                          <>
+                            <Clock className="w-5 h-5" />
+                            Waiting for Instructor
+                          </>
+                       )}
+                    </button>
+                  )}
                </div>
             </div>
 
@@ -370,6 +405,7 @@ const ClassDetails = () => {
                            <h3 className="font-black text-white text-xs uppercase tracking-widest">Upcoming</h3>
                         </div>
                         <div className="space-y-4">
+                           {/* Combined items logic */}
                            {[...assignments, ...quizzes]
                              .sort((a,b) => new Date(a.dueDate || a.createdAt) - new Date(b.dueDate || b.createdAt))
                              .filter(item => new Date(item.dueDate || item.createdAt) > new Date())
@@ -391,6 +427,7 @@ const ClassDetails = () => {
                   </div>
 
                   <div className="flex-1 space-y-6">
+                     {/* Stream content same as before ... */}
                      {isTeacher && (
                         <div className="glass-panel p-6 rounded-[2.5rem] border-indigo-500/10 bg-white/5 relative overflow-hidden group shadow-2xl">
                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-600 opacity-50"></div>
@@ -575,7 +612,7 @@ const ClassDetails = () => {
                         <MetricCard icon={<Users className="w-5 h-5"/>} label="Network Load" value={classStats.totalStudents} color="indigo" />
                         <MetricCard icon={<Target className="w-5 h-5"/>} label="Assessment Rate" value={(classStats.submissionRate || 0) + '%'} color="rose" />
                         <MetricCard icon={<Award className="w-5 h-5"/>} label="Mean Accuracy" value={classStats.avgQuizScore || '0'} color="amber" />
-                        <MetricCard icon={<Zap className="w-5 h-5"/>} label="Active Intensity" value="94%" color="emerald" />
+                        <MetricCard icon={<Zap className="w-5 h-5"/>} label="Attendance Rate" value={(classStats.attendanceRate || 0) + '%'} color="emerald" />
                      </div>
                   )}
 
