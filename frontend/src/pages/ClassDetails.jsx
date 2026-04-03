@@ -52,10 +52,15 @@ const ClassDetails = () => {
          socket.emit('join-room', classId, user._id, user.name, user.role);
          socket.on('classwork-updated', () => {
             dispatch(fetchClasswork(classId));
+            fetchAnnouncements();
+         });
+         socket.on('attendance-updated', () => {
+            fetchClassStats();
          });
          return () => {
             socket.emit('leave-room', classId);
             socket.off('classwork-updated');
+            socket.off('attendance-updated');
          };
       }
    }, [classId, user, dispatch, socket]);
@@ -603,26 +608,29 @@ const ClassDetails = () => {
                      <h2 className="text-4xl font-black text-white mb-4 tracking-tighter">Presence Protocol</h2>
                      <p className="text-slate-400 mb-12 max-w-sm mx-auto font-medium leading-relaxed">Synthesize a unique validation key for student check-ins. Token synchronization prevents unauthorized entry.</p>
                      {!qrToken ? (
-                        <button onClick={handleGenerateQR} disabled={isGeneratingQr} className="bg-indigo-600 hover:bg-indigo-500 text-white px-12 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all flex items-center gap-4 mx-auto shadow-2xl shadow-indigo-600/30 active:scale-95 disabled:opacity-50">
+                        <button onClick={handleGenerateQR} disabled={isGeneratingQr} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 md:px-12 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black uppercase tracking-widest text-[9px] md:text-xs transition-all flex items-center gap-4 mx-auto shadow-2xl shadow-indigo-600/30 active:scale-95 disabled:opacity-50">
                            {isGeneratingQr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                            Initialize QR Session
                         </button>
                      ) : (
-                        <div className="flex flex-col items-center">
-                           <div className="p-8 bg-white rounded-[3rem] mb-10 shadow-3xl border-[8px] border-indigo-600/10 relative">
-                              <QRCodeSVG value={`${window.location.origin}/class/${classId}/attendance/${qrToken}`} size={280} />
+                        <div className="flex flex-col items-center w-full">
+                           <div className="p-4 md:p-8 bg-white rounded-[2rem] md:rounded-[3rem] mb-8 md:mb-10 shadow-3xl border-[6px] md:border-[8px] border-indigo-600/10 relative">
+                              <QRCodeSVG value={`${window.location.origin}/class/${classId}/attendance/${qrToken}`} size={window.innerWidth < 768 ? 200 : 280} />
                            </div>
-                            <div className="text-center space-y-2 mb-8">
-                               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manual Attendance Token</p>
-                               <h3 className="text-sm font-black text-white tracking-widest break-all px-8 py-2 bg-white/5 rounded-xl border border-white/5">{qrToken}</h3>
-                               <p className="text-[8px] text-slate-500 italic">Students can enter this token manually in their scanner terminal if optical link fails.</p>
+                            <div className="text-center space-y-3 mb-8 w-full max-w-sm px-4">
+                               <p className="text-[9px] font-black uppercase tracking-[0.3em] text-indigo-400/60">Manual Attendance Token</p>
+                               <div className="group relative">
+                                  <h3 className="text-xs md:text-sm font-black text-white tracking-widest break-all px-6 py-3 bg-white/5 rounded-2xl border border-white/10 select-all cursor-pointer hover:bg-white/10 transition-colors">{qrToken}</h3>
+                                  <div className="absolute inset-0 bg-indigo-500/10 opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity pointer-events-none"></div>
+                               </div>
+                               <p className="text-[8px] text-slate-500 italic mt-2">Optical link failover: provide this to students for manual terminal entry.</p>
                             </div>
-                           <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-                              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/join/${activeClass.code}`); alert("Link copied!"); }} className="flex-1 max-w-xs py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3">
-                                 <Share2 className="w-4 h-4" /> Copy Join Link
+                           <div className="flex flex-col sm:flex-row gap-4 w-full justify-center max-w-sm px-4">
+                              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/join/${activeClass.code}`); alert("Link copied!"); }} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3">
+                                 <Share2 className="w-4 h-4" /> Copy Link
                               </button>
-                              <button onClick={handleTerminateAttendance} disabled={isTerminatingQr} className="flex-1 max-w-xs py-4 bg-rose-600/10 border border-rose-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-rose-400 hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-                                 {isTerminatingQr ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4" />} Terminate Session
+                              <button onClick={handleTerminateAttendance} disabled={isTerminatingQr} className="w-full py-4 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-rose-600/20">
+                                 {isTerminatingQr ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4" />} End Session
                               </button>
                            </div>
                         </div>

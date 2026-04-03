@@ -164,6 +164,9 @@ exports.createMaterial = async (req, res) => {
       originalName
     });
 
+    const io = req.app.get('io');
+    if (io) io.to(classId).emit('classwork-updated');
+
     res.status(201).json({ success: true, data: material });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -199,6 +202,9 @@ exports.createAssignment = async (req, res) => {
       fileUrl,
       originalName
     });
+
+    const io = req.app.get('io');
+    if (io) io.to(classId).emit('classwork-updated');
 
     res.status(201).json({ success: true, data: assignment });
   } catch (error) {
@@ -266,6 +272,9 @@ exports.createQuiz = async (req, res) => {
       description,
       questions: typeof questions === 'string' ? JSON.parse(questions) : questions
     });
+
+    const io = req.app.get('io');
+    if (io) io.to(classId).emit('classwork-updated');
 
     res.status(201).json({ success: true, data: quiz });
   } catch (error) {
@@ -352,6 +361,9 @@ exports.createAnnouncement = async (req, res) => {
      if (notifications.length > 0) {
         await Notification.insertMany(notifications);
      }
+
+     const io = req.app.get('io');
+     if (io) io.to(classId).emit('classwork-updated');
 
      res.status(201).json({ success: true, data: announcement });
   } catch (err) {

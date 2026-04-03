@@ -220,8 +220,9 @@ const LiveClass = () => {
   }, [localStream]);
 
   const joinCall = () => {
-    if (!localStream || !socket) return;
+    if (!localStreamRef.current || !socket) return;
     setIsJoined(true);
+    isJoinedRef.current = true;
     // Explicit signal that we are now officially part of the peer-to-peer session
     socket.emit('ready-to-call', { userId: user._id, userName: user.name });
   };
@@ -229,8 +230,8 @@ const LiveClass = () => {
   const createPeerConnection = (targetSocketId, targetUserName) => {
      const pc = new RTCPeerConnection(ICE_SERVERS);
      
-     if (localStream) {
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+     if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
      }
 
      pc.onicecandidate = (event) => {
@@ -437,12 +438,12 @@ const LiveClass = () => {
             </div>
          )}
          {isJoined && (
-            <div className="fixed bottom-6 md:bottom-10 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 flex items-center justify-center md:justify-start gap-2 md:gap-4 glass-panel px-4 md:px-10 py-4 md:py-5 rounded-[1.5rem] md:rounded-[2.5rem] border-white/10 bg-white/5 backdrop-blur-3xl shadow-3xl">
-              <button onClick={toggleMic} className={`p-4 rounded-2xl ${isMicOn ? 'bg-indigo-600/10 text-indigo-400' : 'bg-rose-500 text-white hover:bg-rose-400 transition-colors'}`}>{isMicOn ? <Mic /> : <MicOff />}</button>
-              <button onClick={toggleCam} className={`p-4 rounded-2xl ${isCamOn ? 'bg-indigo-600/10 text-indigo-400' : 'bg-rose-500 text-white hover:bg-rose-400 transition-colors'}`}>{isCamOn ? <Video /> : <VideoOff />}</button>
+            <div className="fixed bottom-6 md:bottom-10 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 flex items-center justify-center md:justify-start gap-2 md:gap-4 glass-panel px-3 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-[2.5rem] border-white/10 bg-white/5 backdrop-blur-3xl shadow-3xl">
+              <button onClick={toggleMic} className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${isMicOn ? 'bg-indigo-600/10 text-indigo-400' : 'bg-rose-500 text-white hover:bg-rose-400 transition-colors'}`}>{isMicOn ? <Mic className="w-4 h-4 md:w-6 md:h-6"/> : <MicOff className="w-4 h-4 md:w-6 md:h-6"/>}</button>
+              <button onClick={toggleCam} className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${isCamOn ? 'bg-indigo-600/10 text-indigo-400' : 'bg-rose-500 text-white hover:bg-rose-400 transition-colors'}`}>{isCamOn ? <Video className="w-4 h-4 md:w-6 md:h-6"/> : <VideoOff className="w-4 h-4 md:w-6 md:h-6"/>}</button>
               {isTeacher && (
                 <>
-                  <button onClick={toggleScreenShare} className={`p-4 rounded-2xl ${isScreenSharing ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 transition-colors'}`}><Monitor /></button>
+                  <button onClick={toggleScreenShare} className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${isScreenSharing ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 transition-colors'}`}><Monitor className="w-4 h-4 md:w-6 md:h-6"/></button>
                   <button 
                     onClick={async () => {
                        try {
@@ -453,15 +454,15 @@ const LiveClass = () => {
                           alert("Failed to initialize ledger");
                        }
                     }} 
-                    className="p-4 rounded-2xl bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all shadow-xl"
+                    className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all shadow-xl"
                   >
-                     <Zap className="w-5 h-5" />
+                     <Zap className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
                   </button>
                 </>
               )}
-              <div className="w-px h-10 bg-white/10 mx-2"></div>
-              <button onClick={() => setIsChatOpen(!isChatOpen)} className={`p-4 rounded-2xl ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 transition-colors'}`}><MessageSquare /></button>
-              <button onClick={handUp} className="p-4 rounded-2xl bg-rose-600 text-white shadow-2xl shadow-rose-500/30 hover:bg-rose-500 transition-all hover:scale-110 active:scale-95"><PhoneOff className="rotate-[135deg]" /></button>
+              <div className="w-px h-8 md:h-10 bg-white/10 mx-1 md:mx-2"></div>
+              <button onClick={() => setIsChatOpen(!isChatOpen)} className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 transition-colors'}`}><MessageSquare className="w-4 h-4 md:w-6 md:h-6"/></button>
+              <button onClick={handUp} className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-rose-600 text-white shadow-2xl shadow-rose-500/30 hover:bg-rose-500 transition-all hover:scale-110 active:scale-95"><PhoneOff className="w-4 h-4 md:w-6 md:h-6 rotate-[135deg]" /></button>
            </div>
          )}
          {isChatOpen && isJoined && (
@@ -487,16 +488,16 @@ const LiveClass = () => {
 
           {/* Attendance Generator Modal */}
           {isAttendanceModalOpen && (
-             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-3xl animate-in fade-in duration-500">
+             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-3xl animate-in fade-in duration-500">
                  <div className="glass-panel p-6 md:p-12 rounded-[2rem] md:rounded-[4rem] border-white/5 bg-white/5 max-w-lg w-full text-center shadow-3xl transform scale-100 animate-in zoom-in-95 duration-500">
-                   <h2 className="text-2xl font-black text-white tracking-widest uppercase mb-8">Secure Attendance Code</h2>
-                   <div className="bg-white p-8 rounded-[3rem] shadow-2xl mx-auto mb-10 border-[12px] border-emerald-500/10">
-                      <QRCodeSVG value={`${window.location.origin}/class/${classId}/attendance/${attendanceToken}`} size={240} />
+                   <h2 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase mb-6 md:mb-8">Secure Attendance</h2>
+                   <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl mx-auto mb-8 md:mb-10 border-[8px] md:border-[12px] border-emerald-500/10 inline-block">
+                      <QRCodeSVG value={`${window.location.origin}/class/${classId}/attendance/${attendanceToken}`} size={window.innerWidth < 768 ? 200 : 240} />
                    </div>
-                   <p className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-400 mb-8 animate-pulse">Session Active: Live Sync</p>
+                   <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-emerald-400 mb-6 md:mb-8 animate-pulse">Session Active: Live Sync</p>
                    <button 
                      onClick={() => setIsAttendanceModalOpen(false)}
-                     className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                     className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all focus:outline-none"
                    >
                      Close Ledger
                    </button>

@@ -27,6 +27,8 @@ const io = new Server(server, {
   transports: ['websocket', 'polling']
 });
 
+app.set('io', io);
+
 // Import signaling handler
 require('./sockets/signaling')(io);
 

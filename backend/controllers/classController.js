@@ -232,6 +232,12 @@ exports.markAttendance = async (req, res) => {
     if (!attendance.presentStudents.includes(req.user.id)) {
        attendance.presentStudents.push(req.user.id);
        await attendance.save();
+       
+       // Real-time signal to teacher in the room
+       const io = req.app.get('io');
+       if (io) {
+          io.to(classId).emit('attendance-updated', { studentId: req.user.id, name: req.user.name });
+       }
     }
 
     res.status(200).json({ success: true, message: 'Attendance marked successfully' });
@@ -357,7 +363,11 @@ exports.getAnalytics = async (req, res) => {
       const classIds = enrollments.map(e => e.class);
       
       const totalClasses = classIds.length;
-      const attendanceRecords = await Attendance.find({ class: { $in: classIds } });
+      const enrollment = await Enrollment.findOne({ student: userId, class: { $in: classIds } });
+      const attendanceRecords = await Attendance.find({ 
+         class: { $in: classIds },
+         createdAt: { $gte: enrollment ? enrollment.createdAt : new Date(0) }
+      });
       const presentCount = attendanceRecords.filter(a => a.presentStudents.includes(userId)).length;
       const attendanceRate = attendanceRecords.length > 0 ? ((presentCount / attendanceRecords.length) * 100).toFixed(1) : 100;
       
@@ -415,16 +425,31 @@ exports.getClassAnalytics = async (req, res) => {
       const quizzes = await Quiz.find({ class: id });
       const quizIds = quizzes.map(q => q._id);
       const responses = await QuizResponse.find({ quiz: { $in: quizIds } });
+      
+      // Calculate overall attendance rate for the class
+      const attendanceRecords = await Attendance.find({ class: id });
+      let overallAttendanceRate = 0;
+      if (attendanceRecords.length > 0 && totalStudents > 0) {
+         const totalAttendanceMarks = attendanceRecords.reduce((acc, curr) => acc + curr.presentStudents.length, 0);
+         overallAttendanceRate = ((totalAttendanceMarks / (attendanceRecords.length * totalStudents)) * 100).toFixed(1);
+      } else if (attendanceRecords.length === 0) {
+         overallAttendanceRate = 100; // Perfect until a session is missed
+      }
 
       stats = {
         totalStudents,
         totalAssignments: assignments.length,
         submissionRate: assignments.length > 0 ? ((submissions.length / (assignments.length * totalStudents || 1)) * 100).toFixed(1) : 0,
         avgQuizScore: responses.length > 0 ? (responses.reduce((acc, r) => acc + (r.score || 0), 0) / responses.length).toFixed(1) : 0,
-        totalQuizzes: quizzes.length
+        totalQuizzes: quizzes.length,
+        attendanceRate: overallAttendanceRate
       };
     } else {
-      const attendanceRecords = await Attendance.find({ class: id });
+      const enrollment = await Enrollment.findOne({ class: id, student: userId });
+      const attendanceRecords = await Attendance.find({ 
+         class: id,
+         createdAt: { $gte: enrollment ? enrollment.createdAt : new Date(0) }
+      });
       const presentCount = attendanceRecords.filter(a => a.presentStudents.includes(userId)).length;
       
       const assignments = await Assignment.find({ class: id });
