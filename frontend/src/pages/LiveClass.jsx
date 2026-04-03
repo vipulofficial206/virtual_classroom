@@ -156,11 +156,12 @@ const LiveClass = () => {
           setMessages(prev => [...prev, payload]);
        });
 
-       socket.on('end-call', () => {
-          if (!isTeacher) {
-             setIsShowingEndModal(true);
-          }
-       });
+        socket.on('end-call', () => {
+           if (!isTeacher) {
+              setMessages(prev => [...prev, { userName: 'SYSTEM', message: 'Session terminated by instructional lead.', timestamp: new Date().toISOString() }]);
+              setTimeout(() => navigate(`/class/${classId}`), 2000);
+           }
+        });
 
        socket.on('user-disconnected', (socketId) => {
           if (peersRef.current[socketId]) {
@@ -185,6 +186,13 @@ const LiveClass = () => {
        };
     }
   }, [socket, classId, user]);
+
+  // Protective Redirect: Students can't stay if teacher isn't here
+  useEffect(() => {
+    if (isJoined && !isTeacher && !isTeacherOnline) {
+       navigate(`/class/${classId}`);
+    }
+  }, [isJoined, isTeacher, isTeacherOnline, classId, navigate]);
 
   // Handle hardware termination separately
   useEffect(() => {
@@ -249,17 +257,25 @@ const LiveClass = () => {
 
      pc.ontrack = (event) => {
         setPeers(prev => {
-           const existing = prev.find(p => p.socketId === targetSocketId);
-           if (existing) {
-              // If the existing peer record has a different stream object, update it
-              if (event.streams[0] && existing.stream !== event.streams[0]) {
-                 return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: event.streams[0] } : p);
+           const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
+           if (existingIndex > -1) {
+              const existing = prev[existingIndex];
+              const remoteStream = event.streams[0] || existing.stream;
+              
+              if (!remoteStream.getTracks().find(t => t.id === event.track.id)) {
+                 remoteStream.addTrack(event.track);
+              }
+
+              if (existing.stream !== remoteStream) {
+                 const newPeers = [...prev];
+                 newPeers[existingIndex] = { ...existing, stream: remoteStream };
+                 return newPeers;
               }
               return prev;
            }
-           // Create a new stream from the track if no streams are provided in the event
-           const stream = event.streams[0] || new MediaStream([event.track]);
-           return [...prev, { socketId: targetSocketId, stream, userName: targetUserName }];
+           
+           const newStream = event.streams[0] || new MediaStream([event.track]);
+           return [...prev, { socketId: targetSocketId, stream: newStream, userName: targetUserName }];
         });
      };
 
