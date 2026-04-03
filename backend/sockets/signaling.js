@@ -4,22 +4,24 @@ module.exports = function(io) {
   const socketToRoom = {};
   
   io.on('connection', (socket) => {
-    socket.on('join-room', (roomId, userId, userName, role) => {
+    socket.on('join-room', (roomId, userId, userName, role, options = {}) => {
       const normalizedRole = role?.toLowerCase();
+      const isLive = !!options.isLive;
+
       socket.join(roomId);
-      socketToRoom[socket.id] = { roomId, role: normalizedRole };
+      socketToRoom[socket.id] = { roomId, role: normalizedRole, isLive };
       
       if (!rooms[roomId]) {
          rooms[roomId] = { teacherSocketId: null, sharingSocketId: null, userCount: 0 };
       }
       rooms[roomId].userCount++;
 
-      console.log(`[SESSION] User ${userName} (${normalizedRole}) joined room ${roomId}. Socket: ${socket.id}`);
+      console.log(`[SESSION] User ${userName} (${normalizedRole}) joined room ${roomId}. Context: ${isLive ? 'LIVE' : 'DASH'}`);
 
-      if (normalizedRole === 'teacher' || normalizedRole === 'admin') {
+      if (isLive && (normalizedRole === 'teacher' || normalizedRole === 'admin')) {
          rooms[roomId].teacherSocketId = socket.id;
          socket.to(roomId).emit('teacher-status', { online: true });
-         console.log(`[SESSION] Instructional Lead initialized for room ${roomId}`);
+         console.log(`[SESSION] Instructional Lead initialized LIVE for room ${roomId}`);
       }
 
       socket.emit('room-status', {

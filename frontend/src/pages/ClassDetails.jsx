@@ -52,7 +52,7 @@ const ClassDetails = () => {
 
    useEffect(() => {
       if (socket && classId && user) {
-         socket.emit('join-room', classId, user._id, user.name, user.role);
+         socket.emit('join-room', classId, user._id, user.name, user.role, { isLive: false });
          socket.on('classwork-updated', () => {
             dispatch(fetchClasswork(classId));
             fetchAnnouncements();

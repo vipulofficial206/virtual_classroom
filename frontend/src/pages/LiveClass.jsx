@@ -60,15 +60,21 @@ const LiveClass = () => {
   }, [dispatch, classId, activeClass]);
 
   const isJoinedRef = useRef(false);
+  const isScreenSharingRef = useRef(false);
+
   useEffect(() => {
     isJoinedRef.current = isJoined;
   }, [isJoined]);
 
+  useEffect(() => {
+    isScreenSharingRef.current = isScreenSharing;
+  }, [isScreenSharing]);
+
   // Unified Socket Signal Registry
   useEffect(() => {
     if (socket && classId && user) {
-       // 1. Join room once per session/classId change
-       socket.emit('join-room', classId, user._id, user.name, user.role);
+       // 1. Join room once per session/classId change, specifying LIVE context
+       socket.emit('join-room', classId, user._id, user.name, user.role, { isLive: true });
 
        // 2. Register global signal listeners
        socket.on('room-status', ({ isTeacherOnline, sharingSocketId }) => {
@@ -84,21 +90,13 @@ const LiveClass = () => {
           setSharingSocketId(remoteSharingId);
        });
 
-       socket.on('user-joined', async (newSocketId, userId, userName) => {
-          // Only initiate signaling if WE have already officially joined the call
-          if (isJoinedRef.current) {
-             const pc = createPeerConnection(newSocketId, userName);
-             const offer = await pc.createOffer();
-             await pc.setLocalDescription(offer);
-             
-             socket.emit('offer', {
-                targetSocketId: newSocketId,
-                callerSocketId: socket.id,
-                sdp: pc.localDescription,
-                callerName: user.name
-             });
-          }
-       });
+        socket.on('user-joined', async (newSocketId, userId, userName) => {
+           // Only initiate signaling if WE have already officially joined the call
+           if (isJoinedRef.current) {
+              console.log(`[P2P] Initiating connection handshake with ${userName} (${newSocketId})`);
+              createPeerConnection(newSocketId, userName);
+           }
+        });
 
        socket.on('offer', async (payload) => {
           // Handle incoming calls only if we are in the call
@@ -125,19 +123,20 @@ const LiveClass = () => {
           }
        });
 
-       socket.on('answer', async (payload) => {
-          const pcObj = peersRef.current[payload.callerSocketId];
-          if (pcObj) {
-             await pcObj.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-             
-             if (pcObj.candidateQueue) {
-                while (pcObj.candidateQueue.length > 0) {
-                   const candidate = pcObj.candidateQueue.shift();
-                   await pcObj.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                }
-             }
-          }
-       });
+        socket.on('answer', async (payload) => {
+           const pcObj = peersRef.current[payload.callerSocketId];
+           if (pcObj) {
+              console.log(`[P2P] Received answer from ${payload.callerSocketId}`);
+              await pcObj.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+              
+              if (pcObj.candidateQueue) {
+                 while (pcObj.candidateQueue.length > 0) {
+                    const candidate = pcObj.candidateQueue.shift();
+                    await pcObj.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                 }
+              }
+           }
+        });
 
        socket.on('ice-candidate', async (payload) => {
           const pcObj = peersRef.current[payload.callerSocketId];
@@ -210,8 +209,15 @@ const LiveClass = () => {
   }, []);
 
   const initMedia = async () => {
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+       alert("Warning: Media protocols require a secure (HTTPS) environment. Operations may fail.");
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, 
+        audio: true 
+      });
       setLocalStream(stream);
       localStreamRef.current = stream;
       if (localVideoRef.current) {
@@ -219,8 +225,10 @@ const LiveClass = () => {
       }
       setIsCamOn(true);
       setIsMicOn(true);
+      console.log("[MEDIA] Media stream synchronized successfully.");
     } catch (err) {
       console.error('Failed to get media devices', err);
+      alert("Media Access Denied: Ensure your camera/mic permissions are granted and you are on a secure connection (HTTPS/localhost).");
     }
   };
 
@@ -242,8 +250,32 @@ const LiveClass = () => {
      const pc = new RTCPeerConnection(ICE_SERVERS);
      
      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+        localStreamRef.current.getTracks().forEach(track => {
+           let trackToSend = track;
+           // If teacher is sharing screen, use the screen track for the video sender
+           if (isScreenSharingRef.current && track.kind === 'video' && screenStreamRef.current) {
+              const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+              if (screenTrack) trackToSend = screenTrack;
+           }
+           pc.addTrack(trackToSend, localStreamRef.current);
+        });
      }
+
+     pc.onnegotiationneeded = async () => {
+        try {
+           console.log(`[P2P] Negotiation needed for ${targetSocketId}`);
+           const offer = await pc.createOffer();
+           await pc.setLocalDescription(offer);
+           socket.emit('offer', {
+              targetSocketId,
+              callerSocketId: socket.id,
+              sdp: pc.localDescription,
+              callerName: user.name
+           });
+        } catch (e) {
+           console.error("[P2P] Offer creation failed:", e);
+        }
+     };
 
      pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -255,7 +287,12 @@ const LiveClass = () => {
         }
      };
 
+     pc.oniceconnectionstatechange = () => {
+        console.log(`[P2P] Connection state with ${targetSocketId}: ${pc.iceConnectionState}`);
+     };
+
      pc.ontrack = (event) => {
+        console.log(`[P2P] Received track from ${targetSocketId}:`, event.track.kind);
         setPeers(prev => {
            const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
            if (existingIndex > -1) {
@@ -538,10 +575,10 @@ const LiveClass = () => {
 };
 
 const ParticipantTile = ({ stream, name, isLocal, mirrored }) => (
-  <div className={`relative rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] ${isLocal ? 'w-48 lg:w-full' : ''}`}>
+  <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-sm mx-auto md:max-w-none' : ''}`}>
      <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} />
-     <div className="absolute bottom-4 left-4 z-20 bg-black/40 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 shadow-xl">
-        <span className="text-white text-[9px] font-black uppercase tracking-widest">{name}</span>
+     <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 z-20 bg-black/40 backdrop-blur-md px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-white/10 shadow-xl">
+        <span className="text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest">{name}</span>
      </div>
   </div>
 );
