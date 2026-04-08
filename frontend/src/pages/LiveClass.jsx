@@ -94,31 +94,42 @@ const LiveClass = () => {
            // Only initiate signaling if WE have already officially joined the call
            if (isJoinedRef.current) {
               console.log(`[P2P] Initiating connection handshake with ${userName} (${newSocketId})`);
-              createPeerConnection(newSocketId, userName);
+              // We are the initiator for people who join after us
+              createPeerConnection(newSocketId, userName, true);
            }
         });
 
        socket.on('offer', async (payload) => {
-          // Handle incoming calls only if we are in the call
           if (isJoinedRef.current) {
-             const pc = createPeerConnection(payload.callerSocketId, payload.callerName);
-             await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-             const answer = await pc.createAnswer();
-             await pc.setLocalDescription(answer);
+             console.log(`[P2P] Received offer from ${payload.callerName} (${payload.callerSocketId})`);
+             let pcObj = peersRef.current[payload.callerSocketId];
+             if (!pcObj) {
+                // We are NOT the initiator for incoming offers
+                createPeerConnection(payload.callerSocketId, payload.callerName, false);
+                pcObj = peersRef.current[payload.callerSocketId];
+             }
              
-             socket.emit('answer', {
-                targetSocketId: payload.callerSocketId,
-                callerSocketId: socket.id,
-                sdp: pc.localDescription
-             });
+             const pc = pcObj.peerConnection;
+             try {
+                await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                socket.emit('answer', {
+                   targetSocketId: payload.callerSocketId,
+                   callerSocketId: socket.id,
+                   sdp: pc.localDescription
+                });
 
-             // Flush queued candidates
-             const pcObj = peersRef.current[payload.callerSocketId];
-             if (pcObj?.candidateQueue) {
-                while (pcObj.candidateQueue.length > 0) {
-                   const candidate = pcObj.candidateQueue.shift();
-                   await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                // Flush queued candidates
+                if (pcObj.candidateQueue) {
+                   while (pcObj.candidateQueue.length > 0) {
+                      const candidate = pcObj.candidateQueue.shift();
+                      await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error("[P2P] Failed to add queued candidate", e));
+                   }
                 }
+             } catch (err) {
+                console.error("[P2P] Error handling offer:", err);
              }
           }
        });
@@ -127,13 +138,17 @@ const LiveClass = () => {
            const pcObj = peersRef.current[payload.callerSocketId];
            if (pcObj) {
               console.log(`[P2P] Received answer from ${payload.callerSocketId}`);
-              await pcObj.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-              
-              if (pcObj.candidateQueue) {
-                 while (pcObj.candidateQueue.length > 0) {
-                    const candidate = pcObj.candidateQueue.shift();
-                    await pcObj.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+              try {
+                 await pcObj.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                 
+                 if (pcObj.candidateQueue) {
+                    while (pcObj.candidateQueue.length > 0) {
+                       const candidate = pcObj.candidateQueue.shift();
+                       await pcObj.peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error("[P2P] Failed to add queued candidate", e));
+                    }
                  }
+              } catch (err) {
+                 console.error("[P2P] Error setting remote description from answer:", err);
               }
            }
         });
@@ -142,11 +157,15 @@ const LiveClass = () => {
           const pcObj = peersRef.current[payload.callerSocketId];
           if (pcObj) {
              const pc = pcObj.peerConnection;
-             if (pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-             } else {
-                if (!pcObj.candidateQueue) pcObj.candidateQueue = [];
-                pcObj.candidateQueue.push(payload.candidate);
+             try {
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                   await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                } else {
+                   if (!pcObj.candidateQueue) pcObj.candidateQueue = [];
+                   pcObj.candidateQueue.push(payload.candidate);
+                }
+             } catch (e) {
+                console.error("[P2P] Error adding ice candidate:", e);
              }
           }
        });
@@ -246,7 +265,7 @@ const LiveClass = () => {
     socket.emit('ready-to-call', { userId: user._id, userName: user.name });
   };
 
-  const createPeerConnection = (targetSocketId, targetUserName) => {
+  const createPeerConnection = (targetSocketId, targetUserName, isInitiator) => {
      const pc = new RTCPeerConnection(ICE_SERVERS);
      
      if (localStreamRef.current) {
@@ -262,8 +281,9 @@ const LiveClass = () => {
      }
 
      pc.onnegotiationneeded = async () => {
+        if (!isInitiator) return;
         try {
-           console.log(`[P2P] Negotiation needed for ${targetSocketId}`);
+           console.log(`[P2P] Negotiation needed for ${targetSocketId} (Initiator)`);
            const offer = await pc.createOffer();
            await pc.setLocalDescription(offer);
            socket.emit('offer', {
@@ -289,30 +309,31 @@ const LiveClass = () => {
 
      pc.oniceconnectionstatechange = () => {
         console.log(`[P2P] Connection state with ${targetSocketId}: ${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+           console.log(`[P2P] Connection with ${targetSocketId} failed/disconnected. Cleanup may be needed.`);
+        }
      };
 
      pc.ontrack = (event) => {
         console.log(`[P2P] Received track from ${targetSocketId}:`, event.track.kind);
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        
         setPeers(prev => {
            const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
            if (existingIndex > -1) {
               const existing = prev[existingIndex];
-              const remoteStream = event.streams[0] || existing.stream;
-              
-              if (!remoteStream.getTracks().find(t => t.id === event.track.id)) {
-                 remoteStream.addTrack(event.track);
+              // Ensure track is in the existing stream
+              if (!existing.stream.getTracks().find(t => t.id === event.track.id)) {
+                 existing.stream.addTrack(event.track);
               }
-
-              if (existing.stream !== remoteStream) {
-                 const newPeers = [...prev];
-                 newPeers[existingIndex] = { ...existing, stream: remoteStream };
-                 return newPeers;
-              }
-              return prev;
+              // Force update by creating a new stream object with all current tracks
+              const updatedStream = new MediaStream(existing.stream.getTracks());
+              const newPeers = [...prev];
+              newPeers[existingIndex] = { ...existing, stream: updatedStream };
+              return newPeers;
            }
            
-           const newStream = event.streams[0] || new MediaStream([event.track]);
-           return [...prev, { socketId: targetSocketId, stream: newStream, userName: targetUserName }];
+           return [...prev, { socketId: targetSocketId, stream, userName: targetUserName }];
         });
      };
 
