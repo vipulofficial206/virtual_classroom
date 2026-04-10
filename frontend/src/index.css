@@ -97,6 +97,10 @@ h1, h2, h3, h4, h5, h6 {
   animation: shake 0.4s ease-in-out;
 }
 
+.mirror-x {
+  transform: rotateY(180deg);
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

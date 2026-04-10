@@ -276,23 +276,11 @@ const LiveClass = () => {
   const createPeerConnection = (targetSocketId, targetUserName, isInitiator) => {
      const pc = new RTCPeerConnection(ICE_SERVERS);
      
-     if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-           let trackToSend = track;
-           // If teacher is sharing screen, use the screen track for the video sender
-           if (isScreenSharingRef.current && track.kind === 'video' && screenStreamRef.current) {
-              const screenTrack = screenStreamRef.current.getVideoTracks()[0];
-              if (screenTrack) trackToSend = screenTrack;
-           }
-           pc.addTrack(trackToSend, localStreamRef.current);
-        });
-     }
-
      pc.onnegotiationneeded = async () => {
         if (!isInitiator) return;
         try {
            console.log(`[P2P] Negotiation needed for ${targetSocketId} (Initiator)`);
-           const offer = await pc.createOffer();
+           const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
            await pc.setLocalDescription(offer);
            socket.emit('offer', {
               targetSocketId,
@@ -304,6 +292,18 @@ const LiveClass = () => {
            console.error("[P2P] Offer creation failed:", e);
         }
      };
+
+     if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+           let trackToSend = track;
+           // If teacher is sharing screen, use the screen track for the video sender
+           if (isScreenSharingRef.current && track.kind === 'video' && screenStreamRef.current) {
+              const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+              if (screenTrack) trackToSend = screenTrack;
+           }
+           pc.addTrack(trackToSend, localStreamRef.current);
+        });
+     }
 
      pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -527,7 +527,14 @@ const LiveClass = () => {
                ) : (
                  <div className={`flex-1 grid ${isChatOpen ? 'grid-cols-1 md:grid-cols-2 lg:mr-96' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'} gap-6 content-center auto-rows-fr`}>
                     <ParticipantTile stream={localStream} name={isTeacher ? "Session Coordinator (You)" : "You"} isLocal mirrored />
-                    {peers.map(peer => <ParticipantTile key={peer.socketId} stream={peer.stream} name={peer.userName} />)}
+                    {peers.map(peer => (
+                       <ParticipantTile 
+                         key={peer.socketId} 
+                         stream={peer.stream} 
+                         name={peer.userName} 
+                         onReconnect={() => createPeerConnection(peer.socketId, peer.userName, true)}
+                       />
+                    ))}
                     {peers.length === 0 && (
                        <div className="glass-panel rounded-[2.5rem] border-dashed border-2 flex flex-col items-center justify-center p-10 border-white/5">
                           <Users className="w-12 h-12 text-slate-800 mb-4" />
@@ -617,11 +624,16 @@ const LiveClass = () => {
   );
 };
 
-const ParticipantTile = ({ stream, name, isLocal, mirrored }) => (
+const ParticipantTile = ({ stream, name, isLocal, mirrored, onReconnect }) => (
   <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-sm mx-auto md:max-w-none' : ''}`}>
      <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} muted={isLocal} />
-     <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 z-20 bg-black/40 backdrop-blur-md px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-white/10 shadow-xl">
+     <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 z-20 bg-black/40 backdrop-blur-md px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-white/10 shadow-xl flex items-center gap-2">
         <span className="text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest">{name}</span>
+        {!isLocal && (
+          <button onClick={onReconnect} title="Re-sync Video" className="p-1 hover:bg-white/10 rounded-md transition-colors">
+            <Zap className="w-2.5 h-2.5 text-indigo-400" />
+          </button>
+        )}
      </div>
   </div>
 );
