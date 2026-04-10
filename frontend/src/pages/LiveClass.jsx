@@ -15,7 +15,9 @@ const ICE_SERVERS = {
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' }
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
+    { urls: 'stun:stun.voxgratia.org' }
   ]
 };
 
@@ -322,22 +324,17 @@ const LiveClass = () => {
 
      pc.ontrack = (event) => {
         console.log(`[P2P] Received track from ${targetSocketId}:`, event.track.kind);
-        
-        // Use the first stream provided by the event, or create one from the track
         const remoteStream = event.streams[0] || new MediaStream([event.track]);
         
         setPeers(prev => {
            const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
            if (existingIndex > -1) {
               const existing = prev[existingIndex];
-              // If the existing stream already has tracks, we want to make sure the NEW track is added
-              // but we also want to trigger a re-render in VideoTile.
-              // Note: remoteStream from ontrack is usually the same object for multiple tracks of the same session
+              // Ensure we are using the most up-to-date stream object
               const newPeers = [...prev];
               newPeers[existingIndex] = { ...existing, stream: remoteStream };
               return newPeers;
            }
-           
            return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName }];
         });
      };
@@ -529,7 +526,7 @@ const LiveClass = () => {
                  </div>
                ) : (
                  <div className={`flex-1 grid ${isChatOpen ? 'grid-cols-1 md:grid-cols-2 lg:mr-96' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'} gap-6 content-center auto-rows-fr`}>
-                    <ParticipantTile stream={localStream} name="Master Control (You)" isLocal mirrored />
+                    <ParticipantTile stream={localStream} name={isTeacher ? "Session Coordinator (You)" : "You"} isLocal mirrored />
                     {peers.map(peer => <ParticipantTile key={peer.socketId} stream={peer.stream} name={peer.userName} />)}
                     {peers.length === 0 && (
                        <div className="glass-panel rounded-[2.5rem] border-dashed border-2 flex flex-col items-center justify-center p-10 border-white/5">
