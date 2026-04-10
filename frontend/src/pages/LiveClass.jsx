@@ -115,7 +115,7 @@ const LiveClass = () => {
              const pc = pcObj.peerConnection;
              try {
                 await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-                const answer = await pc.createAnswer();
+                const answer = await pc.createAnswer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
                 await pc.setLocalDescription(answer);
                 
                 socket.emit('answer', {
@@ -308,6 +308,7 @@ const LiveClass = () => {
               const screenTrack = screenStreamRef.current.getVideoTracks()[0];
               if (screenTrack) trackToSend = screenTrack;
            }
+           console.log(`[P2P] Attaching ${trackToSend.kind} track to PC for ${targetUserName}`);
            pc.addTrack(trackToSend, localStreamRef.current);
         });
      }
