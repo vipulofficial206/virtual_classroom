@@ -16,14 +16,10 @@ const ICE_SERVERS = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:stun.voxgratia.org' },
-    { urls: 'stun:stun.ekiga.net' },
-    { urls: 'stun:stun.ideasip.com' },
-    { urls: 'stun:stun.schlund.de' }
+    { urls: 'stun:stun.services.mozilla.com' }
   ],
   bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require'
+  iceCandidatePoolSize: 10
 };
 
 const LiveClass = () => {
@@ -305,16 +301,6 @@ const LiveClass = () => {
         }
      };
 
-     // Use transceivers for more robust audio/video negotiation
-     try {
-        if (pc.addTransceiver) {
-           pc.addTransceiver('audio', { direction: 'sendrecv' });
-           pc.addTransceiver('video', { direction: 'sendrecv' });
-        }
-     } catch (e) {
-        console.warn("[P2P] Transceivers not supported or failed:", e);
-     }
-
      if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
            let trackToSend = track;
@@ -343,20 +329,20 @@ const LiveClass = () => {
      };
 
      pc.ontrack = (event) => {
+        const remoteStream = event.streams[0] || new MediaStream();
+        if (!event.streams[0]) {
+           remoteStream.addTrack(event.track);
+        }
+        
         console.log(`[P2P] Track from ${targetSocketId}:`, event.track.kind);
-        const remoteStream = event.streams[0] || new MediaStream([event.track]);
         
         setPeers(prev => {
            const existing = prev.find(p => p.socketId === targetSocketId);
            if (existing) {
-              // Standard check: Does the existing stream already have this track?
-              const tracks = existing.stream.getTracks();
-              if (!tracks.find(t => t.id === event.track.id)) {
-                 existing.stream.addTrack(event.track);
+              if (existing.stream !== remoteStream) {
+                  return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: remoteStream } : p);
               }
-              // Return a NEW array with a CLONED stream object (or just the incoming one) 
-              // to ensure React sees a change and updates the ParticipantTile props.
-              return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: remoteStream } : p);
+              return prev;
            }
            return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName, status: 'connecting' }];
         });
