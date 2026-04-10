@@ -156,18 +156,20 @@ const LiveClass = () => {
         });
 
        socket.on('ice-candidate', async (payload) => {
-          const pcObj = peersRef.current[payload.callerSocketId];
-          if (pcObj) {
-             const pc = pcObj.peerConnection;
-             try {
-                if (pc.remoteDescription && pc.remoteDescription.type) {
-                   await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-                } else {
-                   if (!pcObj.candidateQueue) pcObj.candidateQueue = [];
-                   pcObj.candidateQueue.push(payload.candidate);
+          if (payload.candidate) {
+             const pcObj = peersRef.current[payload.callerSocketId];
+             if (pcObj) {
+                const pc = pcObj.peerConnection;
+                try {
+                   if (pc.remoteDescription && pc.remoteDescription.type) {
+                      await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                   } else {
+                      if (!pcObj.candidateQueue) pcObj.candidateQueue = [];
+                      pcObj.candidateQueue.push(payload.candidate);
+                   }
+                } catch (e) {
+                   console.error("[P2P] Error adding ice candidate:", e);
                 }
-             } catch (e) {
-                console.error("[P2P] Error adding ice candidate:", e);
              }
           }
        });
@@ -274,12 +276,17 @@ const LiveClass = () => {
   };
 
   const createPeerConnection = (targetSocketId, targetUserName, isInitiator) => {
+     if (peersRef.current[targetSocketId]) {
+        peersRef.current[targetSocketId].peerConnection.close();
+     }
+
      const pc = new RTCPeerConnection(ICE_SERVERS);
      
      pc.onnegotiationneeded = async () => {
         if (!isInitiator) return;
         try {
-           console.log(`[P2P] Negotiation needed for ${targetSocketId} (Initiator)`);
+           if (pc.signalingState !== 'stable') return;
+           console.log(`[P2P] Creating offer for ${targetSocketId}`);
            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
            await pc.setLocalDescription(offer);
            socket.emit('offer', {
@@ -296,7 +303,6 @@ const LiveClass = () => {
      if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
            let trackToSend = track;
-           // If teacher is sharing screen, use the screen track for the video sender
            if (isScreenSharingRef.current && track.kind === 'video' && screenStreamRef.current) {
               const screenTrack = screenStreamRef.current.getVideoTracks()[0];
               if (screenTrack) trackToSend = screenTrack;
@@ -316,26 +322,26 @@ const LiveClass = () => {
      };
 
      pc.oniceconnectionstatechange = () => {
-        console.log(`[P2P] Connection state with ${targetSocketId}: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-           console.log(`[P2P] Connection with ${targetSocketId} failed/disconnected. Cleanup may be needed.`);
-        }
+        const state = pc.iceConnectionState;
+        console.log(`[P2P] State with ${targetSocketId}: ${state}`);
+        setPeers(prev => prev.map(p => p.socketId === targetSocketId ? { ...p, status: state } : p));
      };
 
      pc.ontrack = (event) => {
-        console.log(`[P2P] Received track from ${targetSocketId}:`, event.track.kind);
+        console.log(`[P2P] Track from ${targetSocketId}:`, event.track.kind);
         const remoteStream = event.streams[0] || new MediaStream([event.track]);
         
         setPeers(prev => {
-           const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
-           if (existingIndex > -1) {
-              const existing = prev[existingIndex];
-              // Ensure we are using the most up-to-date stream object
-              const newPeers = [...prev];
-              newPeers[existingIndex] = { ...existing, stream: remoteStream };
-              return newPeers;
+           const existing = prev.find(p => p.socketId === targetSocketId);
+           if (existing) {
+              // Standard check: Does the existing stream already have this track?
+              const tracks = existing.stream.getTracks();
+              if (!tracks.find(t => t.id === event.track.id)) {
+                 existing.stream.addTrack(event.track);
+              }
+              return [...prev]; // Identity change to trigger re-renders
            }
-           return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName }];
+           return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName, status: 'connecting' }];
         });
      };
 
@@ -532,6 +538,7 @@ const LiveClass = () => {
                          key={peer.socketId} 
                          stream={peer.stream} 
                          name={peer.userName} 
+                         status={peer.status}
                          onReconnect={() => createPeerConnection(peer.socketId, peer.userName, true)}
                        />
                     ))}
@@ -624,9 +631,20 @@ const LiveClass = () => {
   );
 };
 
-const ParticipantTile = ({ stream, name, isLocal, mirrored, onReconnect }) => (
+const ParticipantTile = ({ stream, name, isLocal, mirrored, onReconnect, status }) => (
   <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-sm mx-auto md:max-w-none' : ''}`}>
      <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} muted={isLocal} />
+     <div className="absolute top-4 right-4 z-20 flex gap-2">
+        {status && (
+          <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest backdrop-blur-md border ${
+            status === 'connected' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20' : 
+            status === 'failed' ? 'bg-rose-500/20 text-rose-400 border-rose-500/20' : 
+            'bg-amber-500/20 text-amber-400 border-amber-500/20'
+          }`}>
+            {status}
+          </div>
+        )}
+     </div>
      <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 z-20 bg-black/40 backdrop-blur-md px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-white/10 shadow-xl flex items-center gap-2">
         <span className="text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest">{name}</span>
         {!isLocal && (
