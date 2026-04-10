@@ -174,12 +174,18 @@ const LiveClass = () => {
           setMessages(prev => [...prev, payload]);
        });
 
-        socket.on('end-call', () => {
-           if (!isTeacher) {
-              setMessages(prev => [...prev, { userName: 'SYSTEM', message: 'Session terminated by instructional lead.', timestamp: new Date().toISOString() }]);
-              setTimeout(() => navigate(`/class/${classId}`), 2000);
-           }
-        });
+         socket.on('end-call', () => {
+            console.log("[SESSION] End call received");
+            setMessages(prev => [...prev, { userName: 'SYSTEM', message: 'Session terminated by instructional lead.', timestamp: new Date().toISOString() }]);
+            // Stop all local tracks immediately
+            if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(t => t.stop());
+            }
+            if (screenStreamRef.current) {
+               screenStreamRef.current.getTracks().forEach(t => t.stop());
+            }
+            setTimeout(() => navigate(`/class/${classId}`), 2500);
+         });
 
        socket.on('user-disconnected', (socketId) => {
           if (peersRef.current[socketId]) {
@@ -316,24 +322,23 @@ const LiveClass = () => {
 
      pc.ontrack = (event) => {
         console.log(`[P2P] Received track from ${targetSocketId}:`, event.track.kind);
-        const stream = event.streams[0] || new MediaStream([event.track]);
+        
+        // Use the first stream provided by the event, or create one from the track
+        const remoteStream = event.streams[0] || new MediaStream([event.track]);
         
         setPeers(prev => {
            const existingIndex = prev.findIndex(p => p.socketId === targetSocketId);
            if (existingIndex > -1) {
               const existing = prev[existingIndex];
-              // Ensure track is in the existing stream
-              if (!existing.stream.getTracks().find(t => t.id === event.track.id)) {
-                 existing.stream.addTrack(event.track);
-              }
-              // Force update by creating a new stream object with all current tracks
-              const updatedStream = new MediaStream(existing.stream.getTracks());
+              // If the existing stream already has tracks, we want to make sure the NEW track is added
+              // but we also want to trigger a re-render in VideoTile.
+              // Note: remoteStream from ontrack is usually the same object for multiple tracks of the same session
               const newPeers = [...prev];
-              newPeers[existingIndex] = { ...existing, stream: updatedStream };
+              newPeers[existingIndex] = { ...existing, stream: remoteStream };
               return newPeers;
            }
            
-           return [...prev, { socketId: targetSocketId, stream, userName: targetUserName }];
+           return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName }];
         });
      };
 
@@ -404,7 +409,20 @@ const LiveClass = () => {
     setIsScreenSharing(false);
   };
 
-  const handUp = () => navigate(`/class/${classId}`);
+   const terminateSession = () => {
+     if (window.confirm("End the session for all participants? This will force-close the room.")) {
+        socket.emit('end-session', classId);
+        navigate(`/class/${classId}`);
+     }
+  };
+
+  const handUp = () => {
+    if (isTeacher) {
+      terminateSession();
+    } else {
+      navigate(`/class/${classId}`);
+    }
+  };
 
   const handleSendMessage = (e) => {
      e.preventDefault();
@@ -548,7 +566,14 @@ const LiveClass = () => {
               )}
               <div className="w-px h-8 md:h-10 bg-white/10 mx-1 md:mx-2"></div>
               <button onClick={() => setIsChatOpen(!isChatOpen)} className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 transition-colors'}`}><MessageSquare className="w-4 h-4 md:w-6 md:h-6"/></button>
-              <button onClick={handUp} className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-rose-600 text-white shadow-2xl shadow-rose-500/30 hover:bg-rose-500 transition-all hover:scale-110 active:scale-95"><PhoneOff className="w-4 h-4 md:w-6 md:h-6 rotate-[135deg]" /></button>
+               {isTeacher ? (
+                 <button onClick={terminateSession} className="p-3 md:p-4 rounded-xl md:rounded-[1.5rem] bg-rose-600 hover:bg-rose-500 text-white shadow-2xl border border-white/10 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 group">
+                    <PhoneOff className="w-4 h-4 md:w-5 md:h-5 rotate-[135deg]" />
+                    <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">End Meeting</span>
+                 </button>
+               ) : (
+                 <button onClick={handUp} className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-rose-600 text-white shadow-2xl shadow-rose-500/30 hover:bg-rose-500 transition-all hover:scale-110 active:scale-95"><PhoneOff className="w-4 h-4 md:w-6 md:h-6 rotate-[135deg]" /></button>
+               )}
            </div>
          )}
          {isChatOpen && isJoined && (
@@ -597,25 +622,41 @@ const LiveClass = () => {
 
 const ParticipantTile = ({ stream, name, isLocal, mirrored }) => (
   <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-sm mx-auto md:max-w-none' : ''}`}>
-     <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} />
+     <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} muted={isLocal} />
      <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 z-20 bg-black/40 backdrop-blur-md px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-white/10 shadow-xl">
         <span className="text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest">{name}</span>
      </div>
   </div>
 );
 
-const VideoTile = ({ stream, className }) => {
+const VideoTile = ({ stream, className, muted }) => {
    const ref = useRef();
-   useEffect(() => { 
-      if (ref.current && stream) {
-         ref.current.srcObject = stream;
-         // Handle cases where tracks are added later (e.g. video after audio)
-         const onTrackAdded = () => { if (ref.current) ref.current.srcObject = stream; };
-         stream.addEventListener('addtrack', onTrackAdded);
-         return () => stream.removeEventListener('addtrack', onTrackAdded);
-      }
-   }, [stream]);
-   return <video ref={ref} autoPlay playsInline className={`w-full h-full object-cover ${className}`} />;
+    useEffect(() => { 
+       if (ref.current && stream) {
+          ref.current.srcObject = stream;
+          
+          // Ensure it's playing
+          const playVideo = async () => {
+             try {
+                if (ref.current) await ref.current.play();
+             } catch (e) {
+                if (e.name !== 'AbortError') {
+                   console.warn("[VIDEO] Autoplay prevented or failed:", e);
+                }
+             }
+          };
+          playVideo();
+
+          // Handle cases where tracks are added later
+          const onTrackAdded = () => { 
+             console.log("[VIDEO] New track detected in stream");
+             if (ref.current) ref.current.srcObject = stream; 
+          };
+          stream.addEventListener('addtrack', onTrackAdded);
+          return () => stream.removeEventListener('addtrack', onTrackAdded);
+       }
+    }, [stream]);
+   return <video ref={ref} autoPlay playsInline muted={muted} className={`w-full h-full object-cover ${className}`} />;
 };
 
 export default LiveClass;

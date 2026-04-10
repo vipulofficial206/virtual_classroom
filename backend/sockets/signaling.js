@@ -82,6 +82,19 @@ module.exports = function(io) {
        socket.to(roomId).emit('classwork-updated');
     });
 
+    socket.on('end-session', (roomId) => {
+       const userState = socketToRoom[socket.id];
+       if (userState && (userState.role === 'teacher' || userState.role === 'admin')) {
+          console.log(`[SESSION] Instructional Lead explicitly terminated session ${roomId}`);
+          socket.to(roomId).emit('end-call');
+          // Optional: Cleanup room state immediately
+          if (rooms[roomId]) {
+             rooms[roomId].teacherSocketId = null;
+             rooms[roomId].sharingSocketId = null;
+          }
+       }
+    });
+
     const handleDisconnect = () => {
       const userState = socketToRoom[socket.id];
       if (userState) {

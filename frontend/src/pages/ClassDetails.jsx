@@ -458,7 +458,7 @@ const ClassDetails = () => {
                               <div className="flex justify-between items-center">
                                  <div className="flex items-center gap-4">
                                     <div className="h-10 w-10 bg-indigo-600/20 rounded-xl flex items-center justify-center border border-indigo-500/20">
-                                       <span className="text-indigo-400 font-black text-xs">{ann.author.name.charAt(0).toUpperCase()}</span>
+                                       <span className="text-indigo-400 font-black text-xs">{(ann.author?.name || 'U').charAt(0).toUpperCase()}</span>
                                     </div>
                                     <div>
                                        <h4 className="text-sm font-black text-white tracking-tight">{ann.author.name}</h4>
@@ -576,9 +576,9 @@ const ClassDetails = () => {
                   <div className="space-y-4">
                      <h2 className="text-xs font-black uppercase tracking-[0.2em] text-indigo-400 px-2 flex items-center gap-3"><Users className="w-4 h-4"/> Facilitators</h2>
                      <div className="glass-panel p-6 rounded-[2rem] border-white/5 bg-white/5 flex items-center gap-4 shadow-xl">
-                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-white shadow-lg">{activeClass.teacher.name.charAt(0).toUpperCase()}</div>
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-white shadow-lg">{(activeClass.teacher?.name || 'T').charAt(0).toUpperCase()}</div>
                         <div>
-                           <p className="font-black text-white text-lg tracking-tight">{activeClass.teacher.name}</p>
+                           <p className="font-black text-white text-lg tracking-tight">{activeClass.teacher?.name || 'Instructor'}</p>
                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Primary Instructor</p>
                         </div>
                      </div>
@@ -591,7 +591,7 @@ const ClassDetails = () => {
                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {students.map(s => (
                            <div key={s._id} className="glass-panel p-4 rounded-2xl border-white/5 bg-white/5 flex items-center gap-4 hover:shadow-xl transition-all group cursor-default">
-                              <div className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-xs font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner">{s.name.charAt(0).toUpperCase()}</div>
+                              <div className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-xs font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner">{(s.name || 'S').charAt(0).toUpperCase()}</div>
                               <span className="text-sm font-black text-white tracking-tight">{s.name}</span>
                            </div>
                         ))}
