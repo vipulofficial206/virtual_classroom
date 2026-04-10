@@ -17,8 +17,13 @@ const ICE_SERVERS = {
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:stun.voxgratia.org' }
-  ]
+    { urls: 'stun:stun.voxgratia.org' },
+    { urls: 'stun:stun.ekiga.net' },
+    { urls: 'stun:stun.ideasip.com' },
+    { urls: 'stun:stun.schlund.de' }
+  ],
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require'
 };
 
 const LiveClass = () => {
@@ -300,6 +305,16 @@ const LiveClass = () => {
         }
      };
 
+     // Use transceivers for more robust audio/video negotiation
+     try {
+        if (pc.addTransceiver) {
+           pc.addTransceiver('audio', { direction: 'sendrecv' });
+           pc.addTransceiver('video', { direction: 'sendrecv' });
+        }
+     } catch (e) {
+        console.warn("[P2P] Transceivers not supported or failed:", e);
+     }
+
      if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
            let trackToSend = track;
@@ -339,7 +354,9 @@ const LiveClass = () => {
               if (!tracks.find(t => t.id === event.track.id)) {
                  existing.stream.addTrack(event.track);
               }
-              return [...prev]; // Identity change to trigger re-renders
+              // Return a NEW array with a CLONED stream object (or just the incoming one) 
+              // to ensure React sees a change and updates the ParticipantTile props.
+              return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: remoteStream } : p);
            }
            return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName, status: 'connecting' }];
         });
@@ -660,24 +677,34 @@ const VideoTile = ({ stream, className, muted }) => {
    const ref = useRef();
     useEffect(() => { 
        if (ref.current && stream) {
-          ref.current.srcObject = stream;
-          
-          // Ensure it's playing
-          const playVideo = async () => {
-             try {
-                if (ref.current) await ref.current.play();
-             } catch (e) {
-                if (e.name !== 'AbortError') {
-                   console.warn("[VIDEO] Autoplay prevented or failed:", e);
+          // Only re-assign if the stream object has actually changed
+          if (ref.current.srcObject !== stream) {
+             console.log("[VIDEO] Setting srcObject");
+             ref.current.srcObject = stream;
+             
+             const playVideo = async () => {
+                try {
+                   if (ref.current) {
+                      ref.current.volume = 1;
+                      await ref.current.play();
+                      console.log("[VIDEO] Playback started successfully");
+                   }
+                } catch (e) {
+                   if (e.name !== 'AbortError') {
+                      console.warn("[VIDEO] Autoplay prevented or failed:", e);
+                   }
                 }
-             }
-          };
-          playVideo();
+             };
+             playVideo();
+          }
 
-          // Handle cases where tracks are added later
+          // Handle tracks arriving later in the SAME stream object
           const onTrackAdded = () => { 
-             console.log("[VIDEO] New track detected in stream");
-             if (ref.current) ref.current.srcObject = stream; 
+             console.log("[VIDEO] Late track detected");
+             if (ref.current) {
+                // We re-assign to ensure the new track is picked up
+                ref.current.srcObject = stream; 
+             }
           };
           stream.addEventListener('addtrack', onTrackAdded);
           return () => stream.removeEventListener('addtrack', onTrackAdded);
