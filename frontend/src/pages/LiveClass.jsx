@@ -245,8 +245,16 @@ const LiveClass = () => {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, 
-        audio: true 
+        video: { 
+          width: { ideal: 640 }, 
+          height: { ideal: 480 }, 
+          frameRate: { ideal: 24 },
+          facingMode: "user"
+        }, 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true
+        }
       });
       setLocalStream(stream);
       localStreamRef.current = stream;
@@ -643,7 +651,7 @@ const LiveClass = () => {
 };
 
 const ParticipantTile = ({ stream, name, isLocal, mirrored, onReconnect, status }) => (
-  <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-sm mx-auto md:max-w-none' : ''}`}>
+  <div className={`relative rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden glass-panel border-white/5 shadow-2xl group transition-all duration-500 hover:scale-[1.02] aspect-video bg-slate-900/50 ${isLocal ? 'w-full max-w-[280px] md:max-w-none mx-auto' : ''}`}>
      <VideoTile stream={stream} className={mirrored ? 'mirror-x' : ''} muted={isLocal} />
      <div className="absolute top-4 right-4 z-20 flex gap-2">
         {status && (

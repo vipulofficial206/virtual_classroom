@@ -1,90 +1,107 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React from 'react';
+import { Book, GraduationCap, Binary, Shapes, Brain, Sparkles, Orbit, Microscope } from 'lucide-react';
 
 const Background3D = () => {
-  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
-  const containerRef = useRef(null);
+  const items = [
+    { Icon: Book, color: 'text-yellow-400' },
+    { Icon: GraduationCap, color: 'text-blue-400' },
+    { Icon: Binary, color: 'text-purple-400' },
+    { Icon: Shapes, color: 'text-emerald-400' },
+    { Icon: Brain, color: 'text-pink-400' },
+    { Icon: Sparkles, color: 'text-amber-400' },
+    { Icon: Orbit, color: 'text-cyan-400' },
+    { Icon: Microscope, color: 'text-indigo-400' }
+  ];
 
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePos({
-        x: e.clientX / window.innerWidth,
-        y: e.clientY / window.innerHeight,
-      });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  // Increase count and size for better visibility
-  const particles = Array.from({ length: 120 }).map((_, i) => ({
+  const floatingElements = Array.from({ length: 25 }).map((_, i) => ({
     id: i,
     left: `${Math.random() * 100}%`,
     top: `${Math.random() * 100}%`,
-    size: Math.random() * 6 + 2,
-    speed: Math.random() * 40 + 20,
-    opacity: Math.random() * 0.5 + 0.2,
+    size: Math.random() * 40 + 30,
+    duration: Math.random() * 20 + 20,
+    delay: Math.random() * -30,
+    z: Math.random() * 150 - 75,
+    item: items[i % items.length]
   }));
 
-  const blobs = [
-    { color: 'bg-indigo-600/30', size: 'h-[60rem] w-[60rem]', speed: 40, offset: { x: 10, y: 10 } },
-    { color: 'bg-indigo-500/25', size: 'h-[50rem] w-[50rem]', speed: 60, offset: { x: 40, y: 30 } },
-    { color: 'bg-purple-600/25', size: 'h-[55rem] w-[55rem]', speed: 50, offset: { x: 70, y: 50 } },
-    { color: 'bg-blue-600/20', size: 'h-[45rem] w-[45rem]', speed: 30, offset: { x: 20, y: 80 } },
-  ];
-
   return (
-    <div 
-      ref={containerRef}
-      className="fixed inset-0 z-0 overflow-hidden bg-[#020617] pointer-events-none select-none"
-    >
-      {/* Immersive Deep Glow Blobs */}
-      <div className="absolute inset-0 filter blur-[120px] opacity-70">
-        {blobs.map((blob, i) => (
-          <div
-            key={i}
-            className={`absolute rounded-full transition-transform duration-1000 ease-out ${blob.color} ${blob.size}`}
-            style={{
-              transform: `translate(
-                ${(mousePos.x - 0.5) * -blob.speed}px, 
-                ${(mousePos.y - 0.5) * -blob.speed}px
-              )`,
-              left: `${blob.offset.x}%`,
-              top: `${blob.offset.y}%`,
-            }}
-          />
-        ))}
+    <div className="fixed inset-0 z-0 overflow-hidden bg-[#020617] pointer-events-none select-none">
+      <style>{`
+        @keyframes float-hero {
+          0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+          50% { transform: translateY(-50px) rotate(10deg) scale(1.1); }
+        }
+        @keyframes aurora-shift {
+          0%, 100% { transform: translate(0,0) rotate(0deg); opacity: 0.4; }
+          50% { transform: translate(100px, 50px) rotate(180deg); opacity: 0.6; }
+        }
+        @keyframes pulse-glow {
+          0%, 100% { filter: drop-shadow(0 0 10px currentColor); opacity: 0.6; }
+          50% { filter: drop-shadow(0 0 25px currentColor); opacity: 0.9; }
+        }
+        .aurora {
+          animation: aurora-shift 30s infinite alternate ease-in-out;
+        }
+        .hero-element {
+          animation: float-hero var(--dur) infinite alternate ease-in-out;
+        }
+      `}</style>
+
+      {/* Extreme Vibrant Auroras */}
+      <div className="absolute inset-x-[-10%] top-[-10%] h-[120%] w-[120%] filter blur-[120px] opacity-70">
+        <div className="absolute top-[10%] left-[20%] w-[40%] h-[40%] bg-blue-600/30 rounded-full aurora"></div>
+        <div className="absolute top-[40%] right-[10%] w-[50%] h-[50%] bg-purple-600/30 rounded-full aurora" style={{ animationDelay: '-10s' }}></div>
+        <div className="absolute bottom-[20%] left-[10%] w-[45%] h-[45%] bg-indigo-500/30 rounded-full aurora" style={{ animationDelay: '-20s' }}></div>
+        <div className="absolute top-[20%] left-[50%] w-[35%] h-[35%] bg-blue-400/20 rounded-full aurora" style={{ animationDelay: '-5s' }}></div>
       </div>
 
-      {/* Parallax Starfield / Particles */}
+      {/* Energy Grid Mesh (The Student Magnet) */}
+      <div className="absolute inset-0 perspective-[1000px]">
+        <div 
+          className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.1)_1px,transparent_1px)] bg-[size:50px_50px]"
+          style={{ 
+            transform: 'rotateX(75deg) translateY(200px) translateZ(-100px)',
+            maskImage: 'linear-gradient(to top, black, transparent)'
+          }}
+        ></div>
+        <div 
+          className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.1)_1px,transparent_1px)] bg-[size:52px_52px]"
+          style={{ 
+            transform: 'rotateX(-75deg) translateY(-200px) translateZ(-100px)',
+            maskImage: 'linear-gradient(to bottom, black, transparent)'
+          }}
+        ></div>
+      </div>
+
+      {/* Floating 3D-Styled High-Contrast Icons */}
       <div className="absolute inset-0">
-        {particles.map((p) => (
-          <div
-            key={p.id}
-            className="absolute rounded-full bg-white transition-transform duration-700 ease-out shadow-[0_0_8px_rgba(255,255,255,0.4)]"
-            style={{
-              left: p.left,
-              top: p.top,
-              width: `${p.size}px`,
-              height: `${p.size}px`,
-              opacity: p.opacity,
-              transform: `translate(
-                ${(mousePos.x - 0.5) * -p.speed}px, 
-                ${(mousePos.y - 0.5) * -p.speed}px
-              )`,
-            }}
-          />
-        ))}
+        {floatingElements.map((el) => {
+          const { Icon, color } = el.item;
+          return (
+            <div
+              key={el.id}
+              className="absolute hero-element flex flex-col items-center justify-center opacity-60"
+              style={{
+                left: el.left,
+                top: el.top,
+                '--dur': `${el.duration}s`,
+                animationDelay: `${el.delay}s`,
+                transform: `scale(${1 + el.z / 300})`, // Simple 3D scaling
+              }}
+            >
+              <div className={`p-4 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm animate-[pulse-glow_4s_infinite]`}>
+                <Icon className={color} size={el.size} strokeWidth={1.5} />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Subtle Grid / Digital Matrix Overlay (Optional but premium) */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(99,102,241,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]"></div>
-
-      {/* Subtle Grain Overlay for texture - Replaced external 403 SVG with inline base64 noise */}
-      <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj48ZmlsdGVyIGlkPSJuIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iMC42NSIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNuKSIvPjwvc3ZnPg==')]"></div>
+      {/* Technical Overlay & Scan Lines */}
+      <div className="absolute inset-0 bg-[repeating-linear-gradient(0deg,transparent,transparent_4px,rgba(255,255,255,0.01)_5px)] opacity-30"></div>
       
-      {/* Deep Vignette for focus */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#020617_100%)] opacity-60"></div>
+      {/* Deep Vignette & Center Focus */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#020617_90%)] opacity-80 shadow-[inset_0_0_150px_rgba(0,0,0,0.8)]"></div>
     </div>
   );
 };
