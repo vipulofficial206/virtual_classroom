@@ -329,22 +329,29 @@ const LiveClass = () => {
      };
 
      pc.ontrack = (event) => {
-        const remoteStream = event.streams[0] || new MediaStream();
-        if (!event.streams[0]) {
-           remoteStream.addTrack(event.track);
-        }
-        
-        console.log(`[P2P] Track from ${targetSocketId}:`, event.track.kind);
+        console.log(`[P2P] Incoming ${event.track.kind} track from ${targetSocketId}`);
+        const incomingStream = event.streams[0];
         
         setPeers(prev => {
            const existing = prev.find(p => p.socketId === targetSocketId);
+           
+           // We create a fresh MediaStream container every time a track arrives.
+           // This forces React to see a 'prop change' in ParticipantTile -> VideoTile,
+           // triggering the useEffect that sets srcObject.
+           const streamToUse = incomingStream 
+             ? new MediaStream(incomingStream.getTracks()) 
+             : new MediaStream([event.track]);
+
            if (existing) {
-              if (existing.stream !== remoteStream) {
-                  return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: remoteStream } : p);
-              }
-              return prev;
+              return prev.map(p => p.socketId === targetSocketId ? { ...p, stream: streamToUse } : p);
            }
-           return [...prev, { socketId: targetSocketId, stream: remoteStream, userName: targetUserName, status: 'connecting' }];
+           
+           return [...prev, { 
+              socketId: targetSocketId, 
+              stream: streamToUse, 
+              userName: targetUserName, 
+              status: 'connecting' 
+           }];
         });
      };
 
